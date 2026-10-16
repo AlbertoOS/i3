@@ -1,0 +1,70 @@
+# Generated from an exact Git revision by build-package.py; do not edit.
+# shellcheck disable=SC2034,SC2154
+# Metadata and srcdir/pkgdir are consumed/provided by makepkg.
+# Maintainer: AlbertoOS contributors
+pkgname=i3-sparse-edge-experimental
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc='Experimental i3 sparse-edge renderer, installed alongside the system i3'
+arch=('x86_64')
+url='https://github.com/AlbertoOS/i3'
+license=('BSD-3-Clause')
+depends=('libev' 'libxcb' 'xcb-util' 'xcb-util-cursor' 'xcb-util-keysyms'
+         'xcb-util-wm' 'xcb-util-xrm' 'libxkbcommon-x11' 'pcre2'
+         'startup-notification' 'yajl' 'pango' 'cairo')
+makedepends=('meson' 'ninja' 'pkgconf' 'perl' 'python')
+checkdepends=('xorg-server-xvfb' 'xterm')
+provides=()
+conflicts=()
+replaces=()
+options=('!lto' '!debug')
+source=('i3-source.tar.gz')
+sha256sums=('@SOURCE_SHA256@')
+_commit='@COMMIT@'
+
+prepare() {
+  cd "$srcdir/i3-source" || return
+  # git archive has no .git directory. Stamp Meson's documented non-Git
+  # fallback with this exact source identity; no source logic is changed.
+  python - "$pkgver" <<'PY'
+from pathlib import Path
+import sys
+p = Path('meson.build')
+s = p.read_text()
+old = "fallback: meson.project_version() + '-non-git',"
+assert s.count(old) == 1, 'upstream version fallback changed; review packaging'
+p.write_text(s.replace(old, "fallback: '" + sys.argv[1] + "',"))
+PY
+}
+
+build() {
+  # Portable, deliberate baseline: never inherit host-native tuning or LTO.
+  export CFLAGS='-O2 -pipe'
+  export CXXFLAGS="$CFLAGS"
+  meson setup "$srcdir/build" "$srcdir/i3-source" \
+    --prefix=/opt/i3-sparse-edge-experimental --sysconfdir=etc --libdir=lib \
+    --buildtype=release -Db_lto=false -Dwerror=true -Ddocs=false -Dmans=false
+  meson compile -C "$srcdir/build" -j "${I3_BUILD_JOBS:-4}"
+}
+
+check() {
+  # The complete Perl integration suite is exercised separately with upstream's
+  # test image. These are the package's focused native/Xvfb regression tests.
+  env -u DISPLAY -u I3SOCK -u XAUTHORITY \
+    meson test -C "$srcdir/build" --no-rebuild --print-errorlogs \
+      sparse-surface-copy sparse-surface-text-coordinates sparse-surface-geometry \
+      sparse-surface-create-failure sparse-surface-text-rendering \
+      sparse-surface-border-pixels sparse-surface-xvfb-smoke
+}
+
+package() {
+  DESTDIR="$pkgdir" meson install -C "$srcdir/build" --no-rebuild
+  # No desktop/session registration, even within the private prefix.
+  rm -r "$pkgdir/opt/i3-sparse-edge-experimental/share/xsessions" \
+        "$pkgdir/opt/i3-sparse-edge-experimental/share/applications"
+  install -Dm644 "$srcdir/i3-source/LICENSE" \
+    "$pkgdir/opt/i3-sparse-edge-experimental/share/licenses/$pkgname/LICENSE"
+  install -Dm644 "$srcdir/i3-source/packaging/arch/USAGE.md" \
+    "$pkgdir/opt/i3-sparse-edge-experimental/share/doc/i3/EXPERIMENTAL.md"
+  printf '%s\n' "$_commit" > "$pkgdir/opt/i3-sparse-edge-experimental/SOURCE_COMMIT"
+}
