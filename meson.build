@@ -356,6 +356,7 @@ libi3srcs = [
   'libi3/ucs2_conversion.c',
   'libi3/nonblock.c',
   'libi3/screenshot_wallpaper.c',
+  'libi3/sparse_surface_copy.c',
   'libi3/is_background_set.c',
 ]
 
@@ -412,6 +413,7 @@ i3srcs = [
   'src/scratchpad.c',
   'src/sd-daemon.c',
   'src/sighandler.c',
+  'src/sparse_surface.c',
   'src/startup.c',
   'src/sync.c',
   'src/tiling_drag.c',
@@ -488,7 +490,7 @@ common_deps = [
   config_h,
 ]
 
-executable(
+i3 = executable(
   'i3',
   i3srcs,
   install: true,
@@ -559,7 +561,7 @@ executable(
   link_with: libi3,
 )
 
-executable(
+i3_msg = executable(
   'i3-msg',
   'i3-msg/main.c',
   install: true,
@@ -707,6 +709,146 @@ executable(
   dependencies: common_deps,
   link_with: libi3,
 )
+
+test_sparse_surface_copy = executable(
+  'test.sparse_surface_copy',
+  'testcases/test_sparse_surface_copy.c',
+  include_directories: inc,
+  dependencies: [pangocairo_dep, config_h],
+  link_with: libi3,
+)
+
+test('sparse-surface-copy', test_sparse_surface_copy)
+
+xvfb = find_program('Xvfb', required: false)
+xterm = find_program('xterm', required: false)
+
+if cc.has_argument('-ffunction-sections') and cc.has_link_argument('-Wl,--gc-sections')
+  sparse_surface_internal_test_args = ['-ffunction-sections']
+  sparse_surface_internal_test_link_args = ['-Wl,--gc-sections']
+
+  test_sparse_surface_text_coordinates = executable(
+    'test.sparse_surface_text_coordinates',
+    [
+      'testcases/test_sparse_surface_text_coordinates.c',
+      'src/sparse_surface.c',
+    ],
+    include_directories: inc,
+    c_args: sparse_surface_internal_test_args,
+    link_args: sparse_surface_internal_test_link_args,
+    dependencies: common_deps,
+  )
+
+  test('sparse-surface-text-coordinates', test_sparse_surface_text_coordinates)
+
+  test_sparse_surface_geometry = executable(
+    'test.sparse_surface_geometry',
+    [
+      'testcases/test_sparse_surface_geometry.c',
+      'src/sparse_surface.c',
+    ],
+    include_directories: inc,
+    c_args: sparse_surface_internal_test_args,
+    link_args: sparse_surface_internal_test_link_args,
+    dependencies: common_deps,
+  )
+
+  test('sparse-surface-geometry', test_sparse_surface_geometry)
+
+  test_sparse_surface_text_rendering = executable(
+    'test.sparse_surface_text_rendering',
+    ['testcases/test_sparse_surface_text_rendering.c', 'src/sparse_surface.c'],
+    include_directories: inc,
+    c_args: sparse_surface_internal_test_args,
+    link_args: sparse_surface_internal_test_link_args,
+    dependencies: common_deps,
+    link_with: libi3,
+  )
+
+  if xvfb.found()
+    test(
+      'sparse-surface-text-rendering',
+      bash,
+      args: [files('testcases/run_with_xvfb.sh'), xvfb.path(), test_sparse_surface_text_rendering],
+      depends: test_sparse_surface_text_rendering,
+    )
+  endif
+
+  if cc.has_link_argument('-Wl,--wrap=xcb_create_pixmap_checked')
+    test_sparse_surface_create_failure = executable(
+      'test.sparse_surface_create_failure',
+      [
+        'testcases/test_sparse_surface_create_failure.c',
+        'src/sparse_surface.c',
+      ],
+      include_directories: inc,
+      c_args: sparse_surface_internal_test_args,
+      link_args: sparse_surface_internal_test_link_args + ['-Wl,--wrap=xcb_create_pixmap_checked'],
+      dependencies: common_deps,
+    )
+
+    if xvfb.found()
+      test(
+        'sparse-surface-create-failure',
+        bash,
+        args: [
+          files('testcases/run_with_xvfb.sh'),
+          xvfb.path(),
+          test_sparse_surface_create_failure,
+        ],
+        depends: test_sparse_surface_create_failure,
+      )
+    else
+      message('Xvfb unavailable; skipping sparse surface X11 failure test')
+    endif
+  else
+    message('linker lacks symbol wrapping; skipping sparse surface failure injection test')
+  endif
+else
+  message('compiler/linker lack section GC; skipping sparse surface internal tests')
+endif
+
+if xvfb.found() and xterm.found()
+  python3 = find_program('python3', required: false)
+  if python3.found()
+    probe_frame_pixels = executable(
+      'test.probe_frame_pixels',
+      'testcases/probe_frame_pixels.c',
+      dependencies: xcb_dep,
+    )
+    test(
+      'sparse-surface-border-pixels',
+      python3,
+      args: [
+        files('testcases/test_sparse_surface_border_pixels.py'),
+        '--i3', i3,
+        '--i3-msg', i3_msg,
+        '--probe', probe_frame_pixels,
+        '--xvfb', xvfb.path(),
+        '--xterm', xterm.path(),
+      ],
+      depends: [i3, i3_msg, probe_frame_pixels],
+      timeout: 60,
+    )
+  else
+    message('python3 unavailable; skipping sparse surface border pixel test')
+  endif
+  test(
+    'sparse-surface-xvfb-smoke',
+    bash,
+    args: [
+      files('testcases/test_sparse_surface_xvfb_smoke.sh'),
+      i3,
+      i3_msg,
+      xterm.path(),
+      xvfb.path(),
+    ],
+    depends: [i3, i3_msg],
+    timeout: 15,
+  )
+else
+  message('Xvfb or xterm unavailable; skipping sparse surface X11 smoke test')
+endif
 
 anyevent_i3 = custom_target(
   'anyevent-i3',

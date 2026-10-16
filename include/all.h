@@ -78,4 +78,5 @@
 #include "display_version.h"
 #include "restore_layout.h"
 #include "sync.h"
+#include "sparse_surface.h"
 #include "main.h"
