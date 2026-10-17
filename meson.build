@@ -830,6 +830,33 @@ if xvfb.found() and xterm.found()
       depends: [i3, i3_msg, probe_frame_pixels],
       timeout: 60,
     )
+    # LD_PRELOAD observes only the private test WM, never the installed i3.
+    # ASan requires its runtime first in the loader list; do not displace it
+    # with this observer or weaken its link-order validation.
+    if host_machine.system() == 'linux' and not get_option('b_sanitize').contains('address')
+      trace_sparse_allocations = shared_library(
+        'test.trace_sparse_allocations',
+        'testcases/trace_sparse_allocations.c',
+        dependencies: [xcb_dep, cc.find_library('dl')],
+        install: false,
+      )
+      test(
+        'sparse-surface-move',
+        python3,
+        args: [
+          '-B',
+          files('testcases/test_sparse_surface_move.py'),
+          '--i3', i3,
+          '--i3-msg', i3_msg,
+          '--probe', probe_frame_pixels,
+          '--xvfb', xvfb.path(),
+          '--xterm', xterm.path(),
+          '--trace-library', trace_sparse_allocations,
+        ],
+        depends: [i3, i3_msg, probe_frame_pixels, trace_sparse_allocations],
+        timeout: 60,
+      )
+    endif
   else
     message('python3 unavailable; skipping sparse surface border pixel test')
   endif

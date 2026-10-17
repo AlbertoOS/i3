@@ -77,6 +77,7 @@ class PackagePreparationTest(unittest.TestCase):
             self.assertNotIn("@COMMIT@", recipe)
             self.assertNotIn("@VERSION@", recipe)
             self.assertNotIn("@SOURCE_SHA256@", recipe)
+            self.assertIn("sparse-surface-move", recipe)
         self.assertEqual(
             (self.base / "first/i3-source.tar.gz").read_bytes(),
             (self.base / "second/i3-source.tar.gz").read_bytes(),

@@ -1034,8 +1034,11 @@ void x_push_node(Con *con) {
          * background and only afterwards change the window size. This reduces
          * flickering. */
 
-        bool has_rect_changed = (state->rect.x != rect.x || state->rect.y != rect.y ||
-                                 state->rect.width != rect.width || state->rect.height != rect.height);
+        /* Edge pixmaps use frame-local coordinates. Moving the frame does not
+         * change their geometry; recreating them here would add synchronous
+         * allocation checks to every floating-window move. */
+        const bool has_size_changed = (state->rect.width != rect.width ||
+                                       state->rect.height != rect.height);
 
         /* Check if the container has an unneeded pixmap left over from
          * previously having a border or titlebar. */
@@ -1044,7 +1047,7 @@ void x_push_node(Con *con) {
             sparse_surface_free(conn, &(con->frame_buffer));
         }
 
-        if (is_pixmap_needed && (has_rect_changed || has_window_rect_changed || !sparse_surface_initialized(&(con->frame_buffer)))) {
+        if (is_pixmap_needed && (has_size_changed || has_window_rect_changed || !sparse_surface_initialized(&(con->frame_buffer)))) {
             uint16_t win_depth = root_depth;
             if (con->window) {
                 win_depth = con->window->depth;

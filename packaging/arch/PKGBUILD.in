@@ -54,7 +54,7 @@ check() {
     meson test -C "$srcdir/build" --no-rebuild --print-errorlogs \
       sparse-surface-copy sparse-surface-text-coordinates sparse-surface-geometry \
       sparse-surface-create-failure sparse-surface-text-rendering \
-      sparse-surface-border-pixels sparse-surface-xvfb-smoke
+      sparse-surface-border-pixels sparse-surface-move sparse-surface-xvfb-smoke
 }
 
 package() {
